@@ -564,7 +564,7 @@ function renderQuestion() {
   els.sqlInput.value = drafts[q.id] || "";
   els.answerText.innerHTML = q.answerSql ? annotateSql(q.answerSql) : "<p class='empty-answer'>정답이 없습니다.</p>";
   els.explanationText.textContent = q.explanation || "풀이 주석이 없습니다.";
-  if (els.answerPanel) els.answerPanel.open = false;
+  if (els.answerPanel) els.answerPanel.open = true;
   if (els.functionPanel) els.functionPanel.open = false;
 }
 
