@@ -1091,3 +1091,505 @@ ORDER BY 1, 2;
 - 리텐션: 코호트 기준 날짜 이동
 - 품질 체크: `WHERE null`, `HAVING count(*) > 1`
 
+---
+
+## 3) 초보-중간 SQL 코테 20문제
+
+### 초보-중간
+
+- `events(user_id, event_name, event_ts, session_id, platform, country, item_id)`
+- `users(user_id, signup_at, country, age_group)`
+- `sessions(session_id, user_id, start_ts, end_ts, platform)`
+- `orders(order_id, user_id, order_ts, status, amount, country, platform)`
+- `payments(payment_id, order_id, paid_ts, payment_method, payment_status, amount)`
+- `products(item_id, category, price, created_at)`
+- `cart_items(user_id, item_id, added_at, quantity)`
+- `order_items(order_id, item_id, quantity, unit_price)`
+
+### 1. 일자별 앱 실행 유저 수를 구하라
+드릴다운: `app_open` 이벤트만 보고, 같은 유저의 같은 날 중복은 1회로 친다.
+
+```sql
+SELECT
+  DATE(event_ts) AS event_date,
+  COUNT(DISTINCT user_id) AS active_users
+FROM events
+WHERE event_name = 'app_open'
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 가장 기본적인 일자별 활성 사용자 집계다. `COUNT(DISTINCT user_id)`로 중복을 제거한다.
+
+---
+
+### 2. 일자별 가입자 수와 누적 가입자 수를 구하라
+드릴다운: 일자별 신규 가입자 수와 그 누적합을 함께 보여준다.
+
+```sql
+WITH daily_signup AS (
+  SELECT
+    DATE(signup_at) AS signup_date,
+    COUNT(*) AS signups
+  FROM users
+  GROUP BY 1
+)
+SELECT
+  signup_date,
+  signups,
+  SUM(signups) OVER (ORDER BY signup_date) AS cumulative_signups
+FROM daily_signup
+ORDER BY 1;
+```
+
+풀이 주석: 일자별 집계 뒤에 윈도우 함수로 누적합을 붙인다. 이런 형태가 가장 자주 나온다.
+
+---
+
+### 3. 일자별 가입 국가 1위를 구하라
+드릴다운: 같은 날짜 안에서 가입자 수가 가장 많은 국가 1개만 남긴다.
+
+```sql
+WITH daily_country AS (
+  SELECT
+    DATE(signup_at) AS signup_date,
+    country,
+    COUNT(*) AS signups
+  FROM users
+  GROUP BY 1, 2
+)
+SELECT
+  signup_date,
+  country,
+  signups
+FROM daily_country
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY signup_date
+  ORDER BY signups DESC, country
+) = 1
+ORDER BY 1;
+```
+
+풀이 주석: `ROW_NUMBER()`로 1등만 남기는 패턴이다. `QUALIFY`는 윈도우 함수 결과를 바로 거를 때 유용하다.
+
+---
+
+### 4. 플랫폼별 평균 세션 길이를 구하라
+드릴다운: 종료 시각이 있는 세션만 보고 분 단위 평균을 계산한다.
+
+```sql
+SELECT
+  platform,
+  AVG(TIMESTAMP_DIFF(end_ts, start_ts, MINUTE)) AS avg_session_min
+FROM sessions
+WHERE end_ts IS NOT NULL
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 세션 길이는 시작과 끝 시각 차이로 구한다. 초보자가 자주 틀리는 부분은 단위를 먼저 정하지 않는 것이다.
+
+---
+
+### 5. 세션별 평균 이벤트 수를 구하라
+드릴다운: 세션 하나에 이벤트가 평균 몇 번 발생하는지 본다.
+
+```sql
+WITH per_session AS (
+  SELECT
+    session_id,
+    COUNT(*) AS event_cnt
+  FROM events
+  GROUP BY 1
+)
+SELECT
+  AVG(event_cnt) AS avg_events_per_session
+FROM per_session;
+```
+
+풀이 주석: 먼저 세션 단위로 묶고, 그다음 평균을 본다. 집계 단위가 2단계로 내려가는 전형적인 문제다.
+
+---
+
+### 6. 회원가입 후 첫 구매까지 걸린 평균 일수를 구하라
+드릴다운: 첫 구매만 기준으로 가입일 대비 몇 일 뒤인지 본다.
+
+```sql
+WITH first_purchase AS (
+  SELECT
+    user_id,
+    MIN(DATE(order_ts)) AS first_purchase_date
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  AVG(DATE_DIFF(fp.first_purchase_date, DATE(u.signup_at), DAY)) AS avg_days_to_first_purchase
+FROM users u
+JOIN first_purchase fp USING (user_id);
+```
+
+풀이 주석: 가입일과 첫 구매일의 차이를 계산하면 전환 속도를 볼 수 있다. `DATE_DIFF`를 익히는 좋은 연습이다.
+
+---
+
+### 7. 가입 후 3일 이내 첫 구매 전환율을 국가별로 구하라
+드릴다운: 가입한 유저 중 3일 안에 첫 구매를 한 비율을 본다.
+
+```sql
+WITH first_purchase AS (
+  SELECT
+    user_id,
+    MIN(DATE(order_ts)) AS first_purchase_date
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  u.country,
+  COUNT(DISTINCT u.user_id) AS signups,
+  COUNT(DISTINCT IF(
+    fp.first_purchase_date IS NOT NULL
+    AND DATE_DIFF(fp.first_purchase_date, DATE(u.signup_at), DAY) BETWEEN 0 AND 3,
+    u.user_id,
+    NULL
+  )) AS buyers_3d,
+  SAFE_DIVIDE(
+    COUNT(DISTINCT IF(
+      fp.first_purchase_date IS NOT NULL
+      AND DATE_DIFF(fp.first_purchase_date, DATE(u.signup_at), DAY) BETWEEN 0 AND 3,
+      u.user_id,
+      NULL
+    )),
+    COUNT(DISTINCT u.user_id)
+  ) AS conversion_3d
+FROM users u
+LEFT JOIN first_purchase fp USING (user_id)
+GROUP BY 1
+ORDER BY 4 DESC;
+```
+
+풀이 주석: 전환율은 조건을 한 번 더 걸어야 의미가 정확해진다. 가입일 기준 3일 윈도우를 명확히 잡는 것이 핵심이다.
+
+---
+
+### 8. 카테고리별 상품 수와 평균 가격을 구하라
+드릴다운: 상품 카테고리별로 몇 개가 있고 평균 가격이 얼마인지 본다.
+
+```sql
+SELECT
+  category,
+  COUNT(*) AS products,
+  AVG(price) AS avg_price
+FROM products
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 차분한 기본 집계 문제다. `COUNT(*)`와 `AVG()`를 함께 익히기에 좋다.
+
+---
+
+### 9. 일자별 주문 수, 취소 수, 취소율을 구하라
+드릴다운: 주문 흐름에서 취소 비중이 얼마나 되는지 본다.
+
+```sql
+SELECT
+  DATE(order_ts) AS order_date,
+  COUNT(*) AS orders,
+  COUNTIF(status = 'canceled') AS canceled_orders,
+  SAFE_DIVIDE(COUNTIF(status = 'canceled'), COUNT(*)) AS cancel_rate
+FROM orders
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: `COUNTIF`는 조건부 카운트에 바로 쓴다. 취소율은 분모를 전체 주문으로 두는 것이 자연스럽다.
+
+---
+
+### 10. 결제 완료 주문 비율을 플랫폼별로 구하라
+드릴다운: 주문 중 실제 결제 완료된 주문의 비율을 본다.
+
+```sql
+WITH payment_status AS (
+  SELECT
+    o.order_id,
+    o.platform,
+    MAX(IF(p.payment_status = 'completed', 1, 0)) AS paid_flag
+  FROM orders o
+  LEFT JOIN payments p
+    ON o.order_id = p.order_id
+  GROUP BY 1, 2
+)
+SELECT
+  platform,
+  COUNT(*) AS orders,
+  COUNTIF(paid_flag = 1) AS paid_orders,
+  SAFE_DIVIDE(COUNTIF(paid_flag = 1), COUNT(*)) AS paid_rate
+FROM payment_status
+GROUP BY 1
+ORDER BY 4 DESC;
+```
+
+풀이 주석: 주문과 결제를 분리해서 본다. 실무에서는 같은 주문이 여러 결제 시도를 가질 수 있어 이렇게 정리하는 습관이 중요하다.
+
+---
+
+### 11. 상품 카테고리별 조회 → 장바구니 전환율을 구하라
+드릴다운: 같은 상품을 본 유저 중 장바구니에 담은 비율을 계산한다.
+
+```sql
+WITH views AS (
+  SELECT DISTINCT user_id, item_id
+  FROM events
+  WHERE event_name = 'view_item'
+    AND item_id IS NOT NULL
+),
+carts AS (
+  SELECT DISTINCT user_id, item_id
+  FROM events
+  WHERE event_name = 'add_to_cart'
+    AND item_id IS NOT NULL
+)
+SELECT
+  p.category,
+  COUNT(DISTINCT v.user_id) AS viewers,
+  COUNT(DISTINCT IF(c.user_id IS NOT NULL, v.user_id, NULL)) AS cart_users,
+  SAFE_DIVIDE(
+    COUNT(DISTINCT IF(c.user_id IS NOT NULL, v.user_id, NULL)),
+    COUNT(DISTINCT v.user_id)
+  ) AS view_to_cart_rate
+FROM views v
+JOIN products p USING (item_id)
+LEFT JOIN carts c
+  ON v.user_id = c.user_id
+ AND v.item_id = c.item_id
+GROUP BY 1
+ORDER BY 4 DESC;
+```
+
+풀이 주석: 이벤트 전환은 유저와 아이템 둘 다 맞춰서 봐야 한다. 그냥 유저만 맞추면 전환이 부풀 수 있다.
+
+---
+
+### 12. 장바구니에 담고도 구매하지 않은 유저 수를 구하라
+드릴다운: 담기와 구매를 비교해서 이탈 유저를 찾는다.
+
+```sql
+WITH cart_users AS (
+  SELECT DISTINCT user_id, item_id
+  FROM events
+  WHERE event_name = 'add_to_cart'
+),
+purchase_users AS (
+  SELECT DISTINCT user_id, item_id
+  FROM events
+  WHERE event_name = 'purchase'
+)
+SELECT
+  COUNT(DISTINCT cu.user_id) AS cart_users,
+  COUNT(DISTINCT IF(pu.user_id IS NULL, cu.user_id, NULL)) AS abandoners
+FROM cart_users cu
+LEFT JOIN purchase_users pu
+  ON cu.user_id = pu.user_id
+ AND cu.item_id = pu.item_id;
+```
+
+풀이 주석: 이탈 분석은 먼저 "담았지만 안 산 사람"을 뽑는 것에서 시작한다. 그다음 이유를 파면 된다.
+
+---
+
+### 13. 상품별 매출 상위 5개를 구하라
+드릴다운: 주문 상품 기준으로 매출이 가장 큰 상품 5개를 구한다.
+
+```sql
+SELECT
+  oi.item_id,
+  p.category,
+  SUM(oi.quantity * oi.unit_price) AS revenue
+FROM order_items oi
+JOIN products p USING (item_id)
+GROUP BY 1, 2
+ORDER BY revenue DESC
+LIMIT 5;
+```
+
+풀이 주석: 매출은 수량과 단가를 곱한 뒤 합산한다. `LIMIT`으로 상위 몇 개만 보는 패턴을 익힌다.
+
+---
+
+### 14. 유저별 첫 주문일과 마지막 주문일, 기간 차이를 구하라
+드릴다운: 첫 구매 후 얼마나 오래 계속 샀는지 본다.
+
+```sql
+WITH user_orders AS (
+  SELECT
+    user_id,
+    MIN(DATE(order_ts)) AS first_order_date,
+    MAX(DATE(order_ts)) AS last_order_date
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  user_id,
+  first_order_date,
+  last_order_date,
+  DATE_DIFF(last_order_date, first_order_date, DAY) AS span_days
+FROM user_orders
+ORDER BY span_days DESC;
+```
+
+풀이 주석: 첫 주문과 마지막 주문 사이의 간격은 재구매 성향을 보기 좋은 기초 지표다.
+
+---
+
+### 15. 가입 후 7일 안에 아무 행동도 하지 않은 유저를 구하라
+드릴다운: 가입했지만 이벤트가 없는 유저를 찾는다.
+
+```sql
+WITH active_7d AS (
+  SELECT DISTINCT u.user_id
+  FROM users u
+  JOIN events e
+    ON u.user_id = e.user_id
+  WHERE DATE(e.event_ts) BETWEEN DATE(u.signup_at)
+    AND DATE_ADD(DATE(u.signup_at), INTERVAL 7 DAY)
+)
+SELECT
+  u.user_id
+FROM users u
+LEFT JOIN active_7d a USING (user_id)
+WHERE a.user_id IS NULL
+ORDER BY 1;
+```
+
+풀이 주석: 가입자 대비 실제 활동자를 분리하는 문제다. `LEFT JOIN ... IS NULL` 패턴을 연습하기 좋다.
+
+---
+
+### 16. 요일별 구매 건수와 매출을 구하라
+드릴다운: 어떤 요일에 주문과 매출이 몰리는지 본다.
+
+```sql
+SELECT
+  EXTRACT(DAYOFWEEK FROM DATE(order_ts)) AS day_of_week,
+  COUNT(*) AS orders,
+  SUM(amount) AS revenue
+FROM orders
+WHERE status = 'completed'
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 날짜에서 요일을 뽑아내는 `EXTRACT`를 익히는 문제다. 요일별 패턴은 운영에서 자주 본다.
+
+---
+
+### 17. 일자별 구매 건수 전일 대비 증감을 구하라
+드릴다운: 전날과 비교해 주문 수가 얼마나 늘거나 줄었는지 본다.
+
+```sql
+WITH daily_orders AS (
+  SELECT
+    DATE(order_ts) AS order_date,
+    COUNT(*) AS orders
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  order_date,
+  orders,
+  LAG(orders) OVER (ORDER BY order_date) AS prev_orders,
+  orders - LAG(orders) OVER (ORDER BY order_date) AS diff_orders
+FROM daily_orders
+ORDER BY 1;
+```
+
+풀이 주석: `LAG`는 바로 이전 값을 붙이는 데 가장 많이 쓴다. 증감 계산은 입문자가 윈도우 함수를 익히기 좋다.
+
+---
+
+### 18. 반복 구매 유저 수와 반복 구매율을 구하라
+드릴다운: completed 주문을 2번 이상 한 유저를 찾는다.
+
+```sql
+WITH user_purchase AS (
+  SELECT
+    user_id,
+    COUNT(*) AS purchase_cnt
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  COUNT(*) AS purchasers,
+  COUNTIF(purchase_cnt >= 2) AS repeat_purchasers,
+  SAFE_DIVIDE(COUNTIF(purchase_cnt >= 2), COUNT(*)) AS repeat_rate
+FROM user_purchase;
+```
+
+풀이 주석: 단순 구매자 수보다 반복 구매 비율이 더 중요할 때가 많다. `COUNTIF`로 조건부 비율을 계산한다.
+
+---
+
+### 19. 결제 완료가 24시간 안에 잡히지 않은 주문을 찾으라
+드릴다운: 주문은 있었는데 결제 완료가 늦거나 없는 주문을 찾는다.
+
+```sql
+WITH order_payment AS (
+  SELECT
+    o.order_id,
+    o.user_id,
+    o.order_ts,
+    MIN(IF(p.payment_status = 'completed', p.paid_ts, NULL)) AS paid_ts
+  FROM orders o
+  LEFT JOIN payments p
+    ON o.order_id = p.order_id
+  GROUP BY 1, 2, 3
+)
+SELECT
+  order_id,
+  user_id,
+  order_ts,
+  paid_ts
+FROM order_payment
+WHERE paid_ts IS NULL
+   OR TIMESTAMP_DIFF(paid_ts, order_ts, HOUR) > 24
+ORDER BY order_ts;
+```
+
+풀이 주석: 운영에서 자주 보는 품질/정산 문제다. "있어야 할 결제가 없다"를 찾는 습관이 중요하다.
+
+---
+
+### 20. 일자별 퍼널을 한 번에 요약하라
+드릴다운: `app_open → view_item → add_to_cart → purchase`를 일자별로 한 번에 본다.
+
+```sql
+SELECT
+  DATE(event_ts) AS event_date,
+  COUNT(DISTINCT IF(event_name = 'app_open', user_id, NULL)) AS open_users,
+  COUNT(DISTINCT IF(event_name = 'view_item', user_id, NULL)) AS view_users,
+  COUNT(DISTINCT IF(event_name = 'add_to_cart', user_id, NULL)) AS cart_users,
+  COUNT(DISTINCT IF(event_name = 'purchase', user_id, NULL)) AS purchase_users,
+  SAFE_DIVIDE(
+    COUNT(DISTINCT IF(event_name = 'view_item', user_id, NULL)),
+    COUNT(DISTINCT IF(event_name = 'app_open', user_id, NULL))
+  ) AS open_to_view_rate,
+  SAFE_DIVIDE(
+    COUNT(DISTINCT IF(event_name = 'add_to_cart', user_id, NULL)),
+    COUNT(DISTINCT IF(event_name = 'view_item', user_id, NULL))
+  ) AS view_to_cart_rate,
+  SAFE_DIVIDE(
+    COUNT(DISTINCT IF(event_name = 'purchase', user_id, NULL)),
+    COUNT(DISTINCT IF(event_name = 'add_to_cart', user_id, NULL))
+  ) AS cart_to_purchase_rate
+FROM events
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 입문용이지만 가장 실전적인 퍼널 문제다. 단일 전환율보다 단계별 전환율을 같이 봐야 병목이 보인다.

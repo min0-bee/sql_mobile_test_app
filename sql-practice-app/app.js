@@ -34,6 +34,13 @@ const functionLibrary = [
     tip: "복잡한 SQL을 여러 단계로 나눠 읽기 쉽게 만들 때 가장 먼저 떠올리면 됩니다.",
   },
   {
+    name: "DATE_DIFF",
+    pattern: /DATE_DIFF\s*\(/i,
+    signature: "DATE_DIFF(끝날짜, 시작날짜, DAY)",
+    use: "두 날짜 사이의 차이를 일수로 계산합니다.",
+    tip: "가입 후 며칠 만에 구매했는지 볼 때 자주 씁니다.",
+  },
+  {
     name: "COUNT(DISTINCT)",
     pattern: /COUNT\s*\(\s*DISTINCT/i,
     signature: "COUNT(DISTINCT 컬럼)",
@@ -97,6 +104,13 @@ const functionLibrary = [
     tip: "30분 세션 분리 같은 문제에 필요합니다.",
   },
   {
+    name: "EXTRACT",
+    pattern: /EXTRACT\s*\(/i,
+    signature: "EXTRACT(DAYOFWEEK FROM 날짜)",
+    use: "날짜에서 요일, 월 같은 특정 값을 꺼낼 때 사용합니다.",
+    tip: "요일별 구매 패턴, 월별 집계에 자주 씁니다.",
+  },
+  {
     name: "QUALIFY",
     pattern: /QUALIFY\s+/i,
     signature: "QUALIFY 조건",
@@ -116,6 +130,13 @@ const functionLibrary = [
     signature: "IFNULL(값, 대체값)",
     use: "값이 비어 있을 때 기본값으로 바꿉니다.",
     tip: "매출이나 이벤트가 없는 경우 0으로 바꿀 때 씁니다.",
+  },
+  {
+    name: "COALESCE",
+    pattern: /COALESCE\s*\(/i,
+    signature: "COALESCE(값1, 값2, ...)",
+    use: "비어 있지 않은 첫 번째 값을 고를 때 사용합니다.",
+    tip: "NULL 보정이 여러 단계일 때 IFNULL보다 유연합니다.",
   },
   {
     name: "SUM",
@@ -228,6 +249,8 @@ function explainSqlLine(line) {
   if (trimmed.includes("ROW_NUMBER")) return "행에 순서를 매깁니다.";
   if (trimmed.includes("LAG(")) return "바로 이전 행의 값을 가져옵니다.";
   if (trimmed.includes("TIMESTAMP_DIFF")) return "두 시점의 차이를 계산합니다.";
+  if (trimmed.includes("DATE_DIFF")) return "두 날짜의 차이를 계산합니다.";
+  if (trimmed.includes("EXTRACT")) return "날짜에서 요일이나 월 같은 값을 꺼냅니다.";
   if (trimmed.includes("DATE_TRUNC")) return "날짜를 주/월 단위로 묶습니다.";
   if (trimmed.includes("DATE_ADD")) return "날짜에 지정한 기간을 더합니다.";
   if (trimmed.includes("DATE_SUB")) return "날짜에서 지정한 기간을 뺍니다.";
@@ -314,6 +337,7 @@ function parseMarkdown(md) {
   const schemaBlocks = {
     당근: [],
     슈퍼센트: [],
+    "초보-중간": [],
   };
   const questions = [];
 
@@ -344,9 +368,10 @@ function parseMarkdown(md) {
   };
 
   for (const line of lines) {
-    const schemaCompanyMatch = line.match(/^###\s+(당근 숏폼|슈퍼센트)$/);
+    const schemaCompanyMatch = line.match(/^###\s+(당근 숏폼|슈퍼센트|초보-중간)$/);
     const companyMatch = line.match(/^##\s+1\)\s+당근/);
     const supercentMatch = line.match(/^##\s+2\)\s+슈퍼센트/);
+    const beginnerMatch = line.match(/^##\s+3\)\s+초보-중간/);
     const questionMatch = line.match(/^###\s+(\d+)\.\s+(.*)$/);
 
     if (schemaCompanyMatch) {
@@ -365,6 +390,14 @@ function parseMarkdown(md) {
     if (supercentMatch) {
       finalizeQuestion();
       currentCompany = "슈퍼센트";
+      inQuestionSection = true;
+      currentSchemaCompany = null;
+      continue;
+    }
+
+    if (beginnerMatch) {
+      finalizeQuestion();
+      currentCompany = "초보-중간";
       inQuestionSection = true;
       currentSchemaCompany = null;
       continue;
