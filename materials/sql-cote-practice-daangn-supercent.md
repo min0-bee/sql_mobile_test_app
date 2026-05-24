@@ -1115,8 +1115,8 @@ SELECT
   COUNT(DISTINCT user_id) AS active_users
 FROM events
 WHERE event_name = 'app_open'
-GROUP BY 1
-ORDER BY 1;
+GROUP BY event_date
+ORDER BY event_date;
 ```
 
 풀이 주석: 가장 기본적인 일자별 활성 사용자 집계다. `COUNT(DISTINCT user_id)`로 중복을 제거한다.
@@ -1132,14 +1132,14 @@ WITH daily_signup AS (
     DATE(signup_at) AS signup_date,
     COUNT(*) AS signups
   FROM users
-  GROUP BY 1
+  GROUP BY signup_date
 )
 SELECT
   signup_date,
   signups,
   SUM(signups) OVER (ORDER BY signup_date) AS cumulative_signups
 FROM daily_signup
-ORDER BY 1;
+ORDER BY signup_date;
 ```
 
 풀이 주석: 일자별 집계 뒤에 윈도우 함수로 누적합을 붙인다. 이런 형태가 가장 자주 나온다.
@@ -1156,7 +1156,7 @@ WITH daily_country AS (
     country,
     COUNT(*) AS signups
   FROM users
-  GROUP BY 1, 2
+  GROUP BY signup_date, country
 )
 SELECT
   signup_date,
@@ -1167,7 +1167,7 @@ QUALIFY ROW_NUMBER() OVER (
   PARTITION BY signup_date
   ORDER BY signups DESC, country
 ) = 1
-ORDER BY 1;
+ORDER BY signup_date;
 ```
 
 풀이 주석: `ROW_NUMBER()`로 1등만 남기는 패턴이다. `QUALIFY`는 윈도우 함수 결과를 바로 거를 때 유용하다.
@@ -1183,8 +1183,8 @@ SELECT
   AVG(TIMESTAMP_DIFF(end_ts, start_ts, MINUTE)) AS avg_session_min
 FROM sessions
 WHERE end_ts IS NOT NULL
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY platform
+ORDER BY avg_session_min DESC;
 ```
 
 풀이 주석: 세션 길이는 시작과 끝 시각 차이로 구한다. 초보자가 자주 틀리는 부분은 단위를 먼저 정하지 않는 것이다.
@@ -1200,7 +1200,7 @@ WITH per_session AS (
     session_id,
     COUNT(*) AS event_cnt
   FROM events
-  GROUP BY 1
+  GROUP BY session_id
 )
 SELECT
   AVG(event_cnt) AS avg_events_per_session
@@ -1221,7 +1221,7 @@ WITH first_purchase AS (
     MIN(DATE(order_ts)) AS first_purchase_date
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   AVG(DATE_DIFF(fp.first_purchase_date, DATE(u.signup_at), DAY)) AS avg_days_to_first_purchase
@@ -1243,7 +1243,7 @@ WITH first_purchase AS (
     MIN(DATE(order_ts)) AS first_purchase_date
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   u.country,
@@ -1265,8 +1265,8 @@ SELECT
   ) AS conversion_3d
 FROM users u
 LEFT JOIN first_purchase fp USING (user_id)
-GROUP BY 1
-ORDER BY 4 DESC;
+GROUP BY u.country
+ORDER BY conversion_3d DESC;
 ```
 
 풀이 주석: 전환율은 조건을 한 번 더 걸어야 의미가 정확해진다. 가입일 기준 3일 윈도우를 명확히 잡는 것이 핵심이다.
@@ -1282,8 +1282,8 @@ SELECT
   COUNT(*) AS products,
   AVG(price) AS avg_price
 FROM products
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY category
+ORDER BY products DESC;
 ```
 
 풀이 주석: 차분한 기본 집계 문제다. `COUNT(*)`와 `AVG()`를 함께 익히기에 좋다.
@@ -1300,8 +1300,8 @@ SELECT
   COUNTIF(status = 'canceled') AS canceled_orders,
   SAFE_DIVIDE(COUNTIF(status = 'canceled'), COUNT(*)) AS cancel_rate
 FROM orders
-GROUP BY 1
-ORDER BY 1;
+GROUP BY order_date
+ORDER BY order_date;
 ```
 
 풀이 주석: `COUNTIF`는 조건부 카운트에 바로 쓴다. 취소율은 분모를 전체 주문으로 두는 것이 자연스럽다.
@@ -1320,7 +1320,7 @@ WITH payment_status AS (
   FROM orders o
   LEFT JOIN payments p
     ON o.order_id = p.order_id
-  GROUP BY 1, 2
+  GROUP BY o.order_id, o.platform
 )
 SELECT
   platform,
@@ -1328,8 +1328,8 @@ SELECT
   COUNTIF(paid_flag = 1) AS paid_orders,
   SAFE_DIVIDE(COUNTIF(paid_flag = 1), COUNT(*)) AS paid_rate
 FROM payment_status
-GROUP BY 1
-ORDER BY 4 DESC;
+GROUP BY platform
+ORDER BY paid_rate DESC;
 ```
 
 풀이 주석: 주문과 결제를 분리해서 본다. 실무에서는 같은 주문이 여러 결제 시도를 가질 수 있어 이렇게 정리하는 습관이 중요하다.
@@ -1365,8 +1365,8 @@ JOIN products p USING (item_id)
 LEFT JOIN carts c
   ON v.user_id = c.user_id
  AND v.item_id = c.item_id
-GROUP BY 1
-ORDER BY 4 DESC;
+GROUP BY p.category
+ORDER BY view_to_cart_rate DESC;
 ```
 
 풀이 주석: 이벤트 전환은 유저와 아이템 둘 다 맞춰서 봐야 한다. 그냥 유저만 맞추면 전환이 부풀 수 있다.
@@ -1410,7 +1410,7 @@ SELECT
   SUM(oi.quantity * oi.unit_price) AS revenue
 FROM order_items oi
 JOIN products p USING (item_id)
-GROUP BY 1, 2
+GROUP BY oi.item_id, p.category
 ORDER BY revenue DESC
 LIMIT 5;
 ```
@@ -1430,7 +1430,7 @@ WITH user_orders AS (
     MAX(DATE(order_ts)) AS last_order_date
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   user_id,
@@ -1462,7 +1462,7 @@ SELECT
 FROM users u
 LEFT JOIN active_7d a USING (user_id)
 WHERE a.user_id IS NULL
-ORDER BY 1;
+ORDER BY u.user_id;
 ```
 
 풀이 주석: 가입자 대비 실제 활동자를 분리하는 문제다. `LEFT JOIN ... IS NULL` 패턴을 연습하기 좋다.
@@ -1479,8 +1479,8 @@ SELECT
   SUM(amount) AS revenue
 FROM orders
 WHERE status = 'completed'
-GROUP BY 1
-ORDER BY 1;
+GROUP BY day_of_week
+ORDER BY day_of_week;
 ```
 
 풀이 주석: 날짜에서 요일을 뽑아내는 `EXTRACT`를 익히는 문제다. 요일별 패턴은 운영에서 자주 본다.
@@ -1497,7 +1497,7 @@ WITH daily_orders AS (
     COUNT(*) AS orders
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY order_date
 )
 SELECT
   order_date,
@@ -1505,7 +1505,7 @@ SELECT
   LAG(orders) OVER (ORDER BY order_date) AS prev_orders,
   orders - LAG(orders) OVER (ORDER BY order_date) AS diff_orders
 FROM daily_orders
-ORDER BY 1;
+ORDER BY order_date;
 ```
 
 풀이 주석: `LAG`는 바로 이전 값을 붙이는 데 가장 많이 쓴다. 증감 계산은 입문자가 윈도우 함수를 익히기 좋다.
@@ -1522,7 +1522,7 @@ WITH user_purchase AS (
     COUNT(*) AS purchase_cnt
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   COUNT(*) AS purchasers,
@@ -1548,7 +1548,7 @@ WITH order_payment AS (
   FROM orders o
   LEFT JOIN payments p
     ON o.order_id = p.order_id
-  GROUP BY 1, 2, 3
+  GROUP BY o.order_id, o.user_id, o.order_ts
 )
 SELECT
   order_id,
@@ -1588,8 +1588,8 @@ SELECT
     COUNT(DISTINCT IF(event_name = 'add_to_cart', user_id, NULL))
   ) AS cart_to_purchase_rate
 FROM events
-GROUP BY 1
-ORDER BY 1;
+GROUP BY event_date
+ORDER BY event_date;
 ```
 
 풀이 주석: 입문용이지만 가장 실전적인 퍼널 문제다. 단일 전환율보다 단계별 전환율을 같이 봐야 병목이 보인다.
@@ -1624,8 +1624,8 @@ SELECT
   DATE(signup_at) AS signup_date,
   COUNT(*) AS signups
 FROM users
-GROUP BY 1
-ORDER BY 1;
+GROUP BY signup_date
+ORDER BY signup_date;
 ```
 
 풀이 주석: 가장 기본적인 날짜별 집계다. 먼저 `DATE()`로 날짜만 뽑는 습관을 익힌다.
@@ -1640,8 +1640,8 @@ SELECT
   country,
   COUNT(*) AS signups
 FROM users
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY country
+ORDER BY signups DESC;
 ```
 
 풀이 주석: `GROUP BY`와 `ORDER BY`만으로도 기본적인 운영 지표를 만들 수 있다.
@@ -1656,8 +1656,8 @@ SELECT
   age_group,
   COUNT(*) AS signups
 FROM users
-GROUP BY 1
-ORDER BY 1;
+GROUP BY age_group
+ORDER BY age_group;
 ```
 
 풀이 주석: 문자열 카테고리 집계는 초보 단계에서 가장 많이 나온다.
@@ -1672,8 +1672,8 @@ SELECT
   DATE(order_ts) AS order_date,
   COUNT(*) AS orders
 FROM orders
-GROUP BY 1
-ORDER BY 1;
+GROUP BY order_date
+ORDER BY order_date;
 ```
 
 풀이 주석: 가입자 집계와 거의 같은 패턴이다. 테이블만 바뀌었는지 확인하면 된다.
@@ -1688,8 +1688,8 @@ SELECT
   status,
   COUNT(*) AS orders
 FROM orders
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY status
+ORDER BY orders DESC;
 ```
 
 풀이 주석: 상태값 집계는 운영에서 매우 자주 보인다. 상태를 그대로 세는 연습을 한다.
@@ -1719,8 +1719,8 @@ SELECT
   SUM(amount) AS revenue
 FROM orders
 WHERE status = 'completed'
-GROUP BY 1
-ORDER BY 1;
+GROUP BY order_date
+ORDER BY order_date;
 ```
 
 풀이 주석: 매출은 `SUM(amount)`로 구한다. 주문 수와 매출은 다르다는 점을 구분해야 한다.
@@ -1749,8 +1749,8 @@ SELECT
   DATE(view_ts) AS view_date,
   COUNT(*) AS views
 FROM page_views
-GROUP BY 1
-ORDER BY 1;
+GROUP BY view_date
+ORDER BY view_date;
 ```
 
 풀이 주석: 조회 수는 가장 흔한 지표다. 이벤트 수는 `COUNT(*)`로 바로 셀 수 있다.
@@ -1765,8 +1765,8 @@ SELECT
   page_name,
   COUNT(*) AS views
 FROM page_views
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY page_name
+ORDER BY views DESC;
 ```
 
 풀이 주석: 페이지 단위 집계도 초보자가 자주 만나는 기본 문제다.
@@ -1781,8 +1781,8 @@ SELECT
   page_name,
   COUNT(DISTINCT user_id) AS unique_users
 FROM page_views
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY page_name
+ORDER BY unique_users DESC;
 ```
 
 풀이 주석: `COUNT(DISTINCT)`는 중복 제거의 출발점이다. 조회 수와 방문자 수를 구분해야 한다.
@@ -1815,8 +1815,8 @@ SELECT
 FROM orders o
 JOIN users u
   ON o.user_id = u.user_id
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY u.country
+ORDER BY orders DESC;
 ```
 
 풀이 주석: 조인 후 집계는 실무의 기본이다. 어떤 기준으로 묶을지 먼저 정해야 한다.
@@ -1834,8 +1834,8 @@ FROM orders o
 JOIN users u
   ON o.user_id = u.user_id
 WHERE o.status = 'completed'
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY u.country
+ORDER BY avg_amount DESC;
 ```
 
 풀이 주석: 완료 주문만 봐야 평균 금액이 흔들리지 않는다. 상태 조건을 먼저 생각하는 습관이 중요하다.
@@ -1865,8 +1865,8 @@ SELECT
   category,
   COUNT(*) AS products
 FROM products
-GROUP BY 1
-ORDER BY 2 DESC;
+GROUP BY category
+ORDER BY products DESC;
 ```
 
 풀이 주석: 상품 수 집계는 단순하지만, 카테고리별 구조를 읽는 연습에 좋다.
@@ -1882,14 +1882,14 @@ WITH daily_signup AS (
     DATE(signup_at) AS signup_date,
     COUNT(*) AS signups
   FROM users
-  GROUP BY 1
+  GROUP BY signup_date
 )
 SELECT
   signup_date,
   signups,
   SUM(signups) OVER (ORDER BY signup_date) AS cumulative_signups
 FROM daily_signup
-ORDER BY 1;
+ORDER BY signup_date;
 ```
 
 풀이 주석: 누적합은 처음에는 어렵게 느껴지지만, 일자별 집계 뒤에 붙이는 것만 기억하면 된다.
@@ -1906,14 +1906,14 @@ WITH first_order AS (
     MIN(DATE(order_ts)) AS first_order_date
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   first_order_date,
   COUNT(*) AS first_buyers
 FROM first_order
-GROUP BY 1
-ORDER BY 1;
+GROUP BY first_order_date
+ORDER BY first_order_date;
 ```
 
 풀이 주석: 첫 구매는 `MIN()`으로 찾는다. 초보가 다음 단계로 넘어갈 때 꼭 익혀야 하는 패턴이다.
@@ -1930,7 +1930,7 @@ WITH first_order AS (
     MIN(DATE(order_ts)) AS first_order_date
   FROM orders
   WHERE status = 'completed'
-  GROUP BY 1
+  GROUP BY user_id
 )
 SELECT
   COUNT(DISTINCT u.user_id) AS users_7d_purchase
@@ -1951,12 +1951,12 @@ WHERE DATE_DIFF(fo.first_order_date, DATE(u.signup_at), DAY) BETWEEN 0 AND 7;
 WITH signup_daily AS (
   SELECT DATE(signup_at) AS dt, COUNT(*) AS signups
   FROM users
-  GROUP BY 1
+  GROUP BY dt
 ),
 order_daily AS (
   SELECT DATE(order_ts) AS dt, COUNT(*) AS orders
   FROM orders
-  GROUP BY 1
+  GROUP BY dt
 )
 SELECT
   s.dt,
@@ -1964,7 +1964,7 @@ SELECT
   IFNULL(o.orders, 0) AS orders
 FROM signup_daily s
 LEFT JOIN order_daily o USING (dt)
-ORDER BY 1;
+ORDER BY s.dt;
 ```
 
 풀이 주석: 두 일자 집계를 나란히 붙이는 연습이다. `IFNULL`로 없는 값은 0으로 바꾼다.
