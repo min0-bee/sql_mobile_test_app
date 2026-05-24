@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>SQL Practice</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>SQL 코테 연습장</h1>
+        </div>
+        <button id="reloadBtn" class="ghost-btn" type="button">새로고침</button>
+      </header>
+
+      <section class="picker-card">
+        <label for="companySelect">회사 선택</label>
+        <select id="companySelect" aria-label="회사 선택">
+          <option value="all">전체</option>
+          <option value="당근">당근</option>
+          <option value="슈퍼센트">슈퍼센트</option>
+        </select>
+      </section>
+
+      <section class="list-card">
+        <div class="section-head">
+          <h2>문제 목록</h2>
+        </div>
+        <div id="questionList" class="question-list"></div>
+      </section>
+
+      <section class="detail-card">
+        <div class="section-head">
+          <h2 id="questionTitle">문제를 선택하세요</h2>
+        </div>
+
+        <p id="questionPrompt" class="prompt"></p>
+
+        <div class="detail-layout">
+          <div class="detail-main">
+            <details class="schema-block">
+              <summary>스키마 보기</summary>
+              <pre id="schemaText" class="schema-text"></pre>
+            </details>
+
+            <details id="answerPanel" class="answer-panel">
+              <summary>정답 / 풀이 주석</summary>
+              <div class="answer-section">
+                <h3>정답 SQL</h3>
+                <div id="answerText" class="answer-text"></div>
+              </div>
+              <div class="answer-section">
+                <h3>풀이 주석</h3>
+                <p id="explanationText" class="explanation"></p>
+              </div>
+            </details>
+
+            <details id="functionPanel" class="function-panel">
+              <summary>핵심 함수</summary>
+              <div class="section-head compact">
+                <span id="functionHint">문제에 맞는 함수가 자동으로 정리됩니다.</span>
+              </div>
+              <div id="functionCards" class="function-cards"></div>
+            </details>
+          </div>
+        </div>
+
+        <div class="input-stack">
+          <div class="textarea-block">
+            <label for="sqlInput">내 SQL</label>
+            <textarea id="sqlInput" spellcheck="false" placeholder="여기에 SQL을 직접 입력하세요."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <nav class="bottom-nav">
+        <button id="prevBtn" type="button" class="ghost-btn">이전</button>
+        <button id="nextBtn" type="button" class="primary-btn">다음</button>
+      </nav>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
