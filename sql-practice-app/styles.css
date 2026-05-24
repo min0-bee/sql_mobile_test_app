@@ -177,6 +177,12 @@ body {
   margin-top: 14px;
   display: grid;
   gap: 14px;
+  position: sticky;
+  bottom: calc(62px + env(safe-area-inset-bottom));
+  z-index: 4;
+  padding: 10px 0 0;
+  background: linear-gradient(to top, #f7f7f5 72%, rgba(247, 247, 245, 0));
+  backdrop-filter: blur(8px);
 }
 
 .question-item {
@@ -188,6 +194,35 @@ body {
   padding: 12px;
   display: grid;
   gap: 4px;
+}
+
+.q-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.q-badge,
+.q-topic {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.q-badge {
+  background: #e8f0ff;
+  color: #2756bb;
+}
+
+.q-topic {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .question-item.active {
@@ -541,16 +576,6 @@ body {
   .answer-panel,
   .function-panel {
     border-radius: 12px;
-  }
-
-  .input-stack {
-    position: sticky;
-    bottom: calc(62px + env(safe-area-inset-bottom));
-    z-index: 4;
-    margin-top: 16px;
-    padding: 10px 0 0;
-    background: linear-gradient(to top, #f7f7f5 72%, rgba(247, 247, 245, 0));
-    backdrop-filter: blur(8px);
   }
 
   .bottom-nav {

@@ -1,4 +1,4 @@
-const markdownUrl = "../materials/sql-cote-practice-daangn-supercent.md?v=20260524b";
+const markdownUrl = "../materials/sql-cote-practice-daangn-supercent.md?v=20260524c";
 
 const state = {
   companyFilter: "all",
@@ -223,6 +223,26 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function inferDifficulty(company) {
+  if (company === "초보") return "Lv1";
+  if (company === "초보-중간") return "Lv2";
+  if (company === "당근") return "Lv3";
+  if (company === "슈퍼센트") return "Lv4";
+  return "";
+}
+
+function inferTopic(title, answerSql) {
+  const text = `${title}\n${answerSql}`.toUpperCase();
+  if (text.includes("ROW_NUMBER") || text.includes("LAG") || text.includes("QUALIFY")) return "윈도우";
+  if (text.includes("WITH ")) return "CTE";
+  if (text.includes("JOIN")) return "조인";
+  if (text.includes("DATE_DIFF") || text.includes("DATE_TRUNC") || text.includes("TIMESTAMP_DIFF")) return "기간";
+  if (text.includes("COUNTIF") || text.includes("SAFE_DIVIDE") || text.includes("COUNT(DISTINCT")) return "집계";
+  if (text.includes("CASE WHEN")) return "조건";
+  if (text.includes("UNION")) return "UNION";
+  return "기초";
+}
+
 function explainSqlLine(line) {
   const trimmed = line.trim();
   if (!trimmed) return "";
@@ -334,10 +354,11 @@ function renderFunctionCards(question) {
 
 function parseMarkdown(md) {
   const lines = normalizeText(md).split("\n");
-  const schemaBlocks = {
+const schemaBlocks = {
     당근: [],
     슈퍼센트: [],
     "초보-중간": [],
+    초보: [],
   };
   const questions = [];
 
@@ -363,15 +384,18 @@ function parseMarkdown(md) {
       explanation,
       answerSql: currentQuestion.answerLines.join("\n").trim(),
       schema: schemaBlocks[currentQuestion.company].join("\n").trim(),
+      difficulty: inferDifficulty(currentQuestion.company),
+      topic: inferTopic(currentQuestion.title, currentQuestion.answerLines.join("\n")),
     });
     currentQuestion = null;
   };
 
   for (const line of lines) {
-    const schemaCompanyMatch = line.match(/^###\s+(당근 숏폼|슈퍼센트|초보-중간)$/);
+    const schemaCompanyMatch = line.match(/^###\s+(당근 숏폼|슈퍼센트|초보-중간|초보)$/);
     const companyMatch = line.match(/^##\s+1\)\s+당근/);
     const supercentMatch = line.match(/^##\s+2\)\s+슈퍼센트/);
     const beginnerMatch = line.match(/^##\s+3\)\s+초보-중간/);
+    const easyMatch = line.match(/^##\s+4\)\s+초보/);
     const questionMatch = line.match(/^###\s+(\d+)\.\s+(.*)$/);
 
     if (schemaCompanyMatch) {
@@ -398,6 +422,14 @@ function parseMarkdown(md) {
     if (beginnerMatch) {
       finalizeQuestion();
       currentCompany = "초보-중간";
+      inQuestionSection = true;
+      currentSchemaCompany = null;
+      continue;
+    }
+
+    if (easyMatch) {
+      finalizeQuestion();
+      currentCompany = "초보";
       inQuestionSection = true;
       currentSchemaCompany = null;
       continue;
@@ -485,6 +517,10 @@ function renderList() {
     btn.type = "button";
     btn.className = `question-item ${current?.id === q.id ? "active" : ""}`;
     btn.innerHTML = `
+      <span class="q-meta">
+        <span class="q-badge">${escapeHtml(q.difficulty || "")}</span>
+        <span class="q-topic">${escapeHtml(q.topic || "")}</span>
+      </span>
       <span class="q-title">${q.title}</span>
       <span class="q-sub">${q.drilldown.slice(0, 80) || "드릴다운 없음"}</span>
     `;

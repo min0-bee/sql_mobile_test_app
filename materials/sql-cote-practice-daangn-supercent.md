@@ -1593,3 +1593,367 @@ ORDER BY 1;
 ```
 
 풀이 주석: 입문용이지만 가장 실전적인 퍼널 문제다. 단일 전환율보다 단계별 전환율을 같이 봐야 병목이 보인다.
+
+---
+
+## 4) 초보 SQL 코테 20문제
+
+### 초보
+
+- `users(user_id, signup_at, country, age_group)`
+- `orders(order_id, user_id, order_ts, status, amount)`
+- `page_views(view_id, user_id, page_name, view_ts, device)`
+- `products(product_id, category, price, created_at)`
+
+### 1. 일자별 가입자 수를 구하라
+드릴다운: 같은 날 가입한 유저 수를 일자별로 본다.
+
+```sql
+SELECT
+  DATE(signup_at) AS signup_date,
+  COUNT(*) AS signups
+FROM users
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 가장 기본적인 날짜별 집계다. 먼저 `DATE()`로 날짜만 뽑는 습관을 익힌다.
+
+---
+
+### 2. 국가별 가입자 수를 구하라
+드릴다운: 어떤 국가의 가입자가 많은지 본다.
+
+```sql
+SELECT
+  country,
+  COUNT(*) AS signups
+FROM users
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: `GROUP BY`와 `ORDER BY`만으로도 기본적인 운영 지표를 만들 수 있다.
+
+---
+
+### 3. 연령대별 가입자 수를 구하라
+드릴다운: `age_group` 별로 몇 명이 가입했는지 계산한다.
+
+```sql
+SELECT
+  age_group,
+  COUNT(*) AS signups
+FROM users
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 문자열 카테고리 집계는 초보 단계에서 가장 많이 나온다.
+
+---
+
+### 4. 일자별 주문 수를 구하라
+드릴다운: 주문이 언제 많이 발생했는지 본다.
+
+```sql
+SELECT
+  DATE(order_ts) AS order_date,
+  COUNT(*) AS orders
+FROM orders
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 가입자 집계와 거의 같은 패턴이다. 테이블만 바뀌었는지 확인하면 된다.
+
+---
+
+### 5. 상태별 주문 수를 구하라
+드릴다운: completed, canceled, pending 주문 수를 각각 센다.
+
+```sql
+SELECT
+  status,
+  COUNT(*) AS orders
+FROM orders
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 상태값 집계는 운영에서 매우 자주 보인다. 상태를 그대로 세는 연습을 한다.
+
+---
+
+### 6. 완료 주문의 평균 금액을 구하라
+드릴다운: 결제 완료된 주문만 평균 금액을 계산한다.
+
+```sql
+SELECT
+  AVG(amount) AS avg_amount
+FROM orders
+WHERE status = 'completed';
+```
+
+풀이 주석: `WHERE`로 먼저 걸러낸 뒤 평균을 보는 가장 기본적인 패턴이다.
+
+---
+
+### 7. 일자별 매출을 구하라
+드릴다운: 완료 주문의 일자별 매출을 합산한다.
+
+```sql
+SELECT
+  DATE(order_ts) AS order_date,
+  SUM(amount) AS revenue
+FROM orders
+WHERE status = 'completed'
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 매출은 `SUM(amount)`로 구한다. 주문 수와 매출은 다르다는 점을 구분해야 한다.
+
+---
+
+### 8. 최근 7일 가입자 수를 구하라
+드릴다운: 오늘 기준 최근 7일에 가입한 유저만 센다.
+
+```sql
+SELECT
+  COUNT(*) AS signups_7d
+FROM users
+WHERE DATE(signup_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY);
+```
+
+풀이 주석: 기간 조건은 `DATE_SUB`로 많이 푼다. 최근 범위를 잘 자르는 연습이다.
+
+---
+
+### 9. 일자별 조회 수를 구하라
+드릴다운: `page_views`에서 하루에 몇 번 열람했는지 본다.
+
+```sql
+SELECT
+  DATE(view_ts) AS view_date,
+  COUNT(*) AS views
+FROM page_views
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 조회 수는 가장 흔한 지표다. 이벤트 수는 `COUNT(*)`로 바로 셀 수 있다.
+
+---
+
+### 10. 페이지별 조회 수를 구하라
+드릴다운: 어떤 페이지를 가장 많이 보는지 확인한다.
+
+```sql
+SELECT
+  page_name,
+  COUNT(*) AS views
+FROM page_views
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 페이지 단위 집계도 초보자가 자주 만나는 기본 문제다.
+
+---
+
+### 11. 페이지별 순 방문자 수를 구하라
+드릴다운: 같은 사람이 여러 번 봐도 1명으로 센다.
+
+```sql
+SELECT
+  page_name,
+  COUNT(DISTINCT user_id) AS unique_users
+FROM page_views
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: `COUNT(DISTINCT)`는 중복 제거의 출발점이다. 조회 수와 방문자 수를 구분해야 한다.
+
+---
+
+### 12. 주문이 한 번도 없는 유저 수를 구하라
+드릴다운: 가입자는 있는데 주문은 없는 유저를 찾는다.
+
+```sql
+SELECT
+  COUNT(*) AS no_order_users
+FROM users u
+LEFT JOIN orders o
+  ON u.user_id = o.user_id
+WHERE o.user_id IS NULL;
+```
+
+풀이 주석: `LEFT JOIN`과 `IS NULL`은 미구매/미활동 유저를 찾을 때 가장 많이 쓴다.
+
+---
+
+### 13. 국가별 주문 수를 구하라
+드릴다운: 유저 테이블과 주문 테이블을 붙여 국가별 주문 수를 계산한다.
+
+```sql
+SELECT
+  u.country,
+  COUNT(*) AS orders
+FROM orders o
+JOIN users u
+  ON o.user_id = u.user_id
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 조인 후 집계는 실무의 기본이다. 어떤 기준으로 묶을지 먼저 정해야 한다.
+
+---
+
+### 14. 국가별 평균 주문 금액을 구하라
+드릴다운: 각 국가의 평균 주문 금액을 비교한다.
+
+```sql
+SELECT
+  u.country,
+  AVG(o.amount) AS avg_amount
+FROM orders o
+JOIN users u
+  ON o.user_id = u.user_id
+WHERE o.status = 'completed'
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 완료 주문만 봐야 평균 금액이 흔들리지 않는다. 상태 조건을 먼저 생각하는 습관이 중요하다.
+
+---
+
+### 15. 완료 주문 비율을 구하라
+드릴다운: 전체 주문 중 완료 주문이 몇 퍼센트인지 본다.
+
+```sql
+SELECT
+  COUNT(*) AS total_orders,
+  COUNTIF(status = 'completed') AS completed_orders,
+  SAFE_DIVIDE(COUNTIF(status = 'completed'), COUNT(*)) AS completed_rate
+FROM orders;
+```
+
+풀이 주석: 가장 쉬운 전환율 문제다. `COUNTIF`와 `SAFE_DIVIDE`를 같이 익히면 된다.
+
+---
+
+### 16. 제품 카테고리별 상품 수를 구하라
+드릴다운: `products`를 카테고리별로 센다.
+
+```sql
+SELECT
+  category,
+  COUNT(*) AS products
+FROM products
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+풀이 주석: 상품 수 집계는 단순하지만, 카테고리별 구조를 읽는 연습에 좋다.
+
+---
+
+### 17. 일자별 가입자 누적합을 구하라
+드릴다운: 매일 가입자 수와 누적 가입자 수를 같이 본다.
+
+```sql
+WITH daily_signup AS (
+  SELECT
+    DATE(signup_at) AS signup_date,
+    COUNT(*) AS signups
+  FROM users
+  GROUP BY 1
+)
+SELECT
+  signup_date,
+  signups,
+  SUM(signups) OVER (ORDER BY signup_date) AS cumulative_signups
+FROM daily_signup
+ORDER BY 1;
+```
+
+풀이 주석: 누적합은 처음에는 어렵게 느껴지지만, 일자별 집계 뒤에 붙이는 것만 기억하면 된다.
+
+---
+
+### 18. 일자별 첫 구매 유저 수를 구하라
+드릴다운: 각 유저의 첫 주문일을 구한 뒤, 날짜별로 몇 명인지 센다.
+
+```sql
+WITH first_order AS (
+  SELECT
+    user_id,
+    MIN(DATE(order_ts)) AS first_order_date
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  first_order_date,
+  COUNT(*) AS first_buyers
+FROM first_order
+GROUP BY 1
+ORDER BY 1;
+```
+
+풀이 주석: 첫 구매는 `MIN()`으로 찾는다. 초보가 다음 단계로 넘어갈 때 꼭 익혀야 하는 패턴이다.
+
+---
+
+### 19. 가입 후 7일 안에 주문한 유저 수를 구하라
+드릴다운: 가입 후 7일 이내 첫 주문을 한 유저만 센다.
+
+```sql
+WITH first_order AS (
+  SELECT
+    user_id,
+    MIN(DATE(order_ts)) AS first_order_date
+  FROM orders
+  WHERE status = 'completed'
+  GROUP BY 1
+)
+SELECT
+  COUNT(DISTINCT u.user_id) AS users_7d_purchase
+FROM users u
+JOIN first_order fo
+  ON u.user_id = fo.user_id
+WHERE DATE_DIFF(fo.first_order_date, DATE(u.signup_at), DAY) BETWEEN 0 AND 7;
+```
+
+풀이 주석: 가입과 첫 구매 사이의 날짜 차이를 보는 문제다. 전환 속도를 보는 기초 연습으로 좋다.
+
+---
+
+### 20. 일자별 가입자와 주문 수를 한 번에 비교하라
+드릴다운: 같은 날짜 기준으로 가입과 주문을 나란히 본다.
+
+```sql
+WITH signup_daily AS (
+  SELECT DATE(signup_at) AS dt, COUNT(*) AS signups
+  FROM users
+  GROUP BY 1
+),
+order_daily AS (
+  SELECT DATE(order_ts) AS dt, COUNT(*) AS orders
+  FROM orders
+  GROUP BY 1
+)
+SELECT
+  s.dt,
+  s.signups,
+  IFNULL(o.orders, 0) AS orders
+FROM signup_daily s
+LEFT JOIN order_daily o USING (dt)
+ORDER BY 1;
+```
+
+풀이 주석: 두 일자 집계를 나란히 붙이는 연습이다. `IFNULL`로 없는 값은 0으로 바꾼다.
