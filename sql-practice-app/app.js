@@ -1,4 +1,4 @@
-const markdownUrl = "../materials/sql-cote-practice-daangn-supercent.md";
+const markdownUrl = "../materials/sql-cote-practice-daangn-supercent.md?v=20260524b";
 
 const state = {
   companyFilter: "all",
