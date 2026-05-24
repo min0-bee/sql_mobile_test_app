@@ -1596,7 +1596,16 @@ ORDER BY 1;
 
 ---
 
-## 4) 초보 SQL 코테 20문제
+### 초보-중간
+
+- `events(user_id, event_name, event_ts, session_id, platform, country, item_id)`
+- `users(user_id, signup_at, country, age_group)`
+- `sessions(session_id, user_id, start_ts, end_ts, platform)`
+- `orders(order_id, user_id, order_ts, status, amount, country, platform)`
+- `payments(payment_id, order_id, paid_ts, payment_method, payment_status, amount)`
+- `products(item_id, category, price, created_at)`
+- `cart_items(user_id, item_id, added_at, quantity)`
+- `order_items(order_id, item_id, quantity, unit_price)`
 
 ### 초보
 
@@ -1604,6 +1613,8 @@ ORDER BY 1;
 - `orders(order_id, user_id, order_ts, status, amount)`
 - `page_views(view_id, user_id, page_name, view_ts, device)`
 - `products(product_id, category, price, created_at)`
+
+## 4) 초보 SQL 코테 20문제
 
 ### 1. 일자별 가입자 수를 구하라
 드릴다운: 같은 날 가입한 유저 수를 일자별로 본다.

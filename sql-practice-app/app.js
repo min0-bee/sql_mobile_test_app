@@ -399,7 +399,14 @@ const schemaBlocks = {
     const questionMatch = line.match(/^###\s+(\d+)\.\s+(.*)$/);
 
     if (schemaCompanyMatch) {
-      currentSchemaCompany = schemaCompanyMatch[1].includes("당근") ? "당근" : "슈퍼센트";
+      if (schemaCompanyMatch[1].includes("당근")) currentSchemaCompany = "당근";
+      else if (schemaCompanyMatch[1] === "슈퍼센트") currentSchemaCompany = "슈퍼센트";
+      else currentSchemaCompany = schemaCompanyMatch[1];
+      continue;
+    }
+
+    if (currentSchemaCompany && !currentQuestion && !line.match(/^##\s+\d+\)/)) {
+      schemaBlocks[currentSchemaCompany].push(line);
       continue;
     }
 
